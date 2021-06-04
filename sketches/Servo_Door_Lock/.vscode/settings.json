@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.cs": "csharp",
+        "*.ino": "c",
+        "liquidcrystal.h": "c"
+    }
+}
