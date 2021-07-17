@@ -351,18 +351,8 @@ void ReadSerial()
     if (Serial.available()) {
       delay(10);
       receivedData = Serial.parseInt();
-      sprintf(DevModeArg, "%d", receivedData); //convert received data to char array
-      Serial.print("\nSerial is available: ");
-      Serial.println(DevModeArg);
-      //extract the commands
-      dev = DevModeArg[0] - '0';
-      Serial.println(("dev is %s",dev));
-      mode = DevModeArg[1] - '0';   //C automatically converts it
-      Serial.println(("mode is %s",mode));
 
-      switch (dev){ //switch first byte
-        
-      }
+      sprintf(DevModeArg, "%d", receivedData); //convert received data to char array
     }
     
     
