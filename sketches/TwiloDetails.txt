@@ -3,8 +3,6 @@ Messaging Service SID
 MG25cab5150227898e043a9efa28531ae6
 Account SID
 AC3bbf50ae0e7ec3a33e1795c50f00d5ee
-Auth Token
-37cc05c0e8bb00d03c971cc3fc3442bf
 
 TwilioAccountSid
 messageSender
