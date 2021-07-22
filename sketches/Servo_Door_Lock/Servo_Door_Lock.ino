@@ -52,6 +52,7 @@ byte passCodeStatus = 0x0;  //default state
 //index 3: 0 -(off/LOW) 1 -(on/HIGH) 3-TOGGLE
 //if 4| 0-wrong password 1-rightpassword
 
+//response pattern can be found in RPI code
 
 //keypad declearations
 const byte rows = 4;

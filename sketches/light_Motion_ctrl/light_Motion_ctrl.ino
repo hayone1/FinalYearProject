@@ -208,11 +208,18 @@ int underworld_tempo[] = {
 
 #define DHTTYPE    DHT11  
 #define melodyPin 3
-#define TemperaturePin A0
+#define TemperaturePin A2
 int DHT11Pin = 4;
 int RelayPin = 7;
-int motionSensorPin = 8;
-int alarmCeaseButtonPin = 2;
+int motionSensorPin = A3;
+boolean motionSensorState = LOW;  //start out as low
+int calibrationTime = 30; //the time when the sensor outputs a low impulse
+// bool motionState = LOW; //start with no motion
+int alarmToggleButtonPin = 2;
+int alarmForceStopButtonPin = 3;
+bool alarmToggleState = false;  //by default, the alarm is off
+bool alarmToggleGetready = false;  
+//bcs its a button, pressing button gets ready, releasing toggles
 int buzzerPin = 5;
 int blueledPin = 11;
 int redledPin = 9;
@@ -231,7 +238,7 @@ int arg;
 int receivedData;
 
 bool awayMode = true;
-byte Response[5];
+byte Response[5]; //unused
 //byte ok = 14;
 //1-read sensor, 
 //2-read servo Position,
@@ -244,10 +251,9 @@ byte Response[5];
 //2- read humidity sensor
 //3- read motion sensor 
 //4- set light state
-//4- set extension box state
+//5- toggle alarm state
+//6- set home and away mode
 
-//index: 0  1 2 3 4 5
-//response: deviceState temperatureSign temperatureValue Humidity Alarm 
 
 DHT_Unified dht(DHT11Pin, DHTTYPE);   //initialize the dht attributes
 sensors_event_t event;
@@ -255,34 +261,60 @@ sensors_event_t event;
 
 void setup() {
   // Set RelayPin as an output pin
+  Serial.begin(9600);
+  Serial.println("im working");
+  
   pinMode(RelayPin, OUTPUT);
   pinMode(redledPin, OUTPUT);
   pinMode(blueledPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
   pinMode(melodyPin, OUTPUT);
   pinMode(motionSensorPin, INPUT);
-  pinMode(alarmCeaseButtonPin, INPUT);
+  pinMode(alarmToggleButtonPin, INPUT);
+  pinMode(alarmForceStopButtonPin, INPUT);
   pinMode(greenledPin, OUTPUT);
   
 
   dht.begin();
-  //Wire.begin(SLAVE_ADDRESS);
-  //Wire.onRequest(OnRequestData);
-  //Wire.onReceive(OnReceiveData);
+  sensor_t sensor;
+  dht.humidity().getSensor(&sensor);
+
+  //randomSeed(analogRead(3)); //initialize random number generator
+
+  //attachInterrupt(digitalPinToInterrupt(alarmForceStopButtonPin), StopAlarm, CHANGE); // trigger when button pressed, but not when released.
 
  
   soundAlarm = false;
+  //wait for pir to calibrate
+  Serial.print("calibrating sensor "); 
+  for(int i = 0; i < calibrationTime; i++){ 
+   Serial.print("."); 
+   delay(1000); 
+   } 
+   //Serial.println(" done"); 
+   Serial.println("SENSOR ACTIVE"); 
+   delay(50);
 }
 
 void loop() {
-  if (awayMode == true && digitalRead(motionSensorPin) == HIGH && soundAlarm == false){ 
-    //also include in or away code and door bypassed code
-      soundAlarm = true;
-      SoundAlarm();
+  //I commented this away bcs the logic is handled by the RPI
+  // if (awayMode == true && digitalRead(motionSensorPin) == HIGH && soundAlarm == false){ 
+  //   //also include in or away code and door bypassed code
+  //     soundAlarm = true;
+  //     SoundAlarm();
+  // }
+  if (digitalRead(alarmToggleButtonPin) == LOW) {  //or if receive sound off from pi
+      alarmToggleGetready = true;
+      Serial.println("I am detected as presseD");
+      //return;
   }
-  if (digitalRead(alarmCeaseButtonPin) == HIGH || soundAlarm == false) {  //or if receive sound off from pi
-      soundAlarm = false;
-      //SoundAlarm();
+  else if (digitalRead(alarmToggleButtonPin) == HIGH && alarmToggleGetready == true) {  //or if receive sound off from pi
+      soundAlarm = !soundAlarm;
+      Serial.println("I am detected as released");
+      SoundAlarm();
+      alarmToggleGetready = false;  
+      
+      //to prevent a held down button from causing continuous trigger
       //return;
   }
 
@@ -291,7 +323,7 @@ void loop() {
   digitalWrite(adhocledPin, !digitalRead(adhocledPin));
   digitalWrite(greenledPin, LOW);
   //this lcd changing helps me know the arduino is working
-  delay(1000);
+  delay(400);
   
   // Let's turn off the relay...
   //digitalWrite(RelayPin, HIGH);
@@ -302,44 +334,58 @@ void ToggleIndoorLight()
 {
     digitalWrite(RelayPin, !digitalRead(RelayPin)); //write the opposite 
 }
+void TurnOffLight()
+{
+    digitalWrite(RelayPin, LOW); //write the opposite 
+}
+void TurnOnLight()
+{
+    digitalWrite(RelayPin, HIGH); //write the opposite 
+}
+void StopAlarm()
+{
+  soundAlarm = false;
+}
 
 void SoundAlarm()
 {
-    digitalWrite(greenledPin, LOW);  //start by putting on red led
     digitalWrite(redledPin, HIGH);  //start by putting on red led
-    digitalWrite(adhocledPin, HIGH);
+    digitalWrite(greenledPin, LOW);  //start by putting on red led
+    digitalWrite(blueledPin, LOW);
+    //digitalWrite(adhocledPin, HIGH);
     
     if (soundAlarm != true) {
       //digitalWrite(buzzerPin, HIGH);
       digitalWrite(redledPin, LOW);
       digitalWrite(blueledPin, LOW);
       digitalWrite(buzzerPin, LOW);
+      Serial.println("sound alarm not true");
       return;
     }
-  //sound alarmand change light here
   while (soundAlarm == true){
       //Blink red and blue Led
       if (digitalRead(redledPin)) {
           digitalWrite(redledPin, LOW);
-          digitalWrite(adhocledPin, LOW);
+          // digitalWrite(greenledPin, LOW);
           digitalWrite(blueledPin, HIGH);
       }
       else
       {
           digitalWrite(redledPin, HIGH);
-          digitalWrite(adhocledPin, HIGH);
+          // digitalWrite(greenledPin, LOW);
           digitalWrite(blueledPin, LOW);
       }
     //digitalWrite(ledPin, !digitalRead(ledPin));
     
     //sound alarm code here 2 represents the song
-      Response[3] = (byte)1;
-    //wire.write()//write alarm to wire
+    long _randSongNumber = random(1, 3);
     sing(2);    //hmmm will the method wait for it to finish?
-    if (digitalRead(alarmCeaseButtonPin) == HIGH || soundAlarm == false){  //or if receive sound off from pi
+    if (digitalRead(alarmForceStopButtonPin) == LOW){  //or if receive sound off from pi
+      Serial.println("alarm force stop");
       soundAlarm = false;
-      //return;
+      return;
     }
+    ReadSerial();
     delay(1000);
     
     
@@ -348,85 +394,99 @@ void SoundAlarm()
 
 void ReadSerial()
 {
+  //first read motionsensor pin
+  if (analogRead(motionSensorPin) > 50 && motionSensorState != HIGH){
+    motionSensorState = HIGH;
+    Serial.println("motion detected");
+  }
+  else if (analogRead(motionSensorPin) == LOW && motionSensorState != LOW){
+    motionSensorState = LOW;
+    Serial.println("motion not detected");
+  }
+
+  int val = analogRead(A3);  // read the input pin
+  Serial.print("analog read: ");          // debug value
+  Serial.print(val);          // debug value
+  Serial.print(" sensor state: ");          // debug value
+  Serial.println(motionSensorState); 
+  
     if (Serial.available()) {
+      Serial.println("starting to read serial");
       delay(10);
       receivedData = Serial.parseInt();
-
       sprintf(DevModeArg, "%d", receivedData); //convert received data to char array
-    }
-    
-    
-    Wire.readBytesUntil('\n', receivedData, 3);
-    //Wire.readStringUntil('\n');
-    mode = receivedData[0];
-    // Read second byte which is the device in context. Only Valid for Mode 2
-    dev = receivedData[1];
-    // Read third byte which is argument. Only Valid for Mode 2
-    arg = receivedData[2];
-
-
-    // Signal specified pin if Mode 2 is received
-    switch (mode)
-    {
-        case 2:
-            switch (dev) {
-                case 3: //togle indoor light
-                    ToggleIndoorLight();
-                    break;
-                case 4: //stop alaram
-                    //digitalWrite(ledPin, LOW);
-                    //digitalWrite(buzzerPin, LOW);
-                    soundAlarm = false;
-                    break;
-                case 5:
-                    soundAlarm = true;
-                    SoundAlarm();
-                    break;
-                case 6:
-                    awayMode = true;
-                    break;
-                case 7:
-                    awayMode = false;
-                    break;
-                default:
-                    break;
-            }
-        break;
-        default:
-            break;
-    }
-
-}
-
-void OnRequestData() {
-    switch (mode)   //from the same reading of onReceive
-    {
-        case 0: //read arsuino  state
-            Serial.println("arduino1: connected || response to device state");  //send back as connected
-            Response[0] = (byte)1;
-        break;
-        case 1: //read sensors
-            //dht.temperature().getEvent(&event);
-            int Tempcel;
-            Tempcel = ReadLM35();
-            Response[1] = (byte)((Tempcel < 0) ? 0 : 1);  //send in the sign first
-            Response[2] = abs(Tempcel); //send in the positive value next
-            Serial.println((" response temperature: &d", Tempcel));    //return temperature
-            dht.humidity().getEvent(&event);
-            Response[3] = (byte)ReadHumidity;
-            Serial.println(("response humidity: &d", ReadHumidity()));   //check directly if buzzer pin is sounding
-            Response[4] = (digitalRead(buzzerPin) == HIGH) ? 1 : 0;
-        break;
-        //case 2: //on sound alaram, receive feedback 
-        //    Response[3] = (digitalRead(buzzerPin) == HIGH) ? 1 : 0; //reply with the buzzer state(should be high)
-        //        break;
-                //index: 0  1 2 3 4 5
-                //response: deviceState temperature Humidity Alarm  
-
-        default:
-            break;
-    }
-    Wire.write(Response, 5);  //write to the wire here
+      Serial.print("\nSerial is available: ");
+      Serial.println(DevModeArg);
+      dev = DevModeArg[0] - '0';
+      Serial.println(("dev is %s",dev));
+      mode = DevModeArg[1] - '0';   //C automatically converts it
+      Serial.println(("mode is %s",mode));
+      switch (dev)  //respond to received code
+      {
+        case 1: { //read temp sensor
+          float tempcel = ReadLM35();
+          //char sign = (tempcel < 0) ? '-' : '+';
+          Serial.print("mytemperaturesensor;property2:");
+          Serial.println(tempcel);
+          // Serial.println(("mytemperaturesensor;property2:%c%g",sign,tempcel));
+          break; }
+        case 2: { //read humidity sensor
+          int temphum = ReadHumidity();
+          Serial.print("myhumiditysensor;property2:");
+          Serial.println(temphum);
+          break; }
+        case 3: { //read motion sensor
+          //bool tempmtn = ReadMotion();
+          //true, false string must be capitalized to work
+          const char *state = analogRead(motionSensorPin) > 50 ? "True" : "False";
+          Serial.print("mymotionsensor;property2:");
+          //Serial.print(analogRead(motionSensorPin));
+          //Serial.println(motionSensorState);
+          Serial.println(state);
+        break; }
+        case 4: { //set light state and extension box
+          switch (mode){
+            case 0: {
+              TurnOffLight();
+              break; }
+            case 1: {
+              TurnOnLight();
+              break; }
+            default: {  //case 3 or otherwise
+              ToggleIndoorLight();
+              Serial.println("toggle light");
+              
+              break; }
+          }
+          break; }  //break for parent case 4
+        case 5: { //togle alarm
+          if (soundAlarm == false){
+            Serial.println("toggle sound alarm");
+            soundAlarm = true;
+            SoundAlarm();
+          }
+          else {soundAlarm = false;}
+        break; }  
+        case 6: { //set home and away
+          switch (mode){
+            case 0: {
+              awayMode = false;
+              break; }
+            case 1: {
+              awayMode = true;
+              break; }
+            default: {  //case 3 or otherwise, just toggle
+              Serial.println("toggle away mode");
+              awayMode = !awayMode;
+              break; }
+          }
+        break; }  //break for parent case 4
+        default: {
+            break; }
+      }
+      digitalWrite(12, !digitalRead(12)); //to indicate that action has been performed
+  
+  }
 }
 
 float ReadLM35() //read the lm35 temperature
@@ -444,13 +504,23 @@ float ReadLM35() //read the lm35 temperature
 
 int ReadHumidity()
 {
-    dht.humidity().getEvent(&event);
+  delay(500);  //dht needs a delay of 1500 secs actually
+    dht.humidity().getEvent(&event);  //event is defined above
     int val = event.relative_humidity;
     if (isnan(val)) {   //for error
         val = -1;
         return val;
     }
     return val;
+}
+
+boolean ReadMotion()
+{
+  return digitalRead(motionSensorPin);
+  // if (motionState != val){  
+  //     motionState = val;
+  //     return motionState;
+  // }
 }
 
 
@@ -461,7 +531,7 @@ int ReadHumidity()
 
 
 
-void sing(int s) {
+void sing(long s) {
   // iterate over the notes of the melody:
   song = s;
   if (song == 2) {
@@ -479,10 +549,12 @@ void sing(int s) {
       // to distinguish the notes, set a minimum time between them.
       // the note's duration + 30% seems to work well:
       int pauseBetweenNotes = noteDuration * 1.30;
-      if (digitalRead(alarmCeaseButtonPin) == HIGH) {  //or if receive sound off from pi
+      if (digitalRead(alarmForceStopButtonPin) == LOW) {  //or if receive sound off from pi
+        Serial.println("alarm force stop");
           soundAlarm = false;
           return;   //end the sound
       }
+      ReadSerial();
       delay(pauseBetweenNotes);
 
       // stop the tone playing:
@@ -524,10 +596,12 @@ void buzz(int targetPin, long frequency, long length) {
   //// multiply frequency, which is really cycles per second, by the number of seconds to
   //// get the total number of cycles to produce
   for (long i = 0; i < numCycles; i++) { // for the calculated length of time...
-      if (digitalRead(alarmCeaseButtonPin) == HIGH || soundAlarm == false) {  //or if receive sound off from pi
+      if (digitalRead(alarmForceStopButtonPin) == LOW) {  //or if receive sound off from pi
           soundAlarm = false;
+          Serial.println("alarm force stop");
           return;   //end the sound
       }
+      ReadSerial();
     digitalWrite(targetPin, HIGH); // write the buzzer pin high to push out the diaphram
     delayMicroseconds(delayValue); // wait for the calculated delay value
     digitalWrite(targetPin, LOW); // write the buzzer pin low to pull back the diaphram

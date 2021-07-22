@@ -1,4 +1,6 @@
 {
     "board": "arduino:avr:uno",
-    "programmer": "arduino:arduinoisp"
+    "programmer": "arduino:arduinoisp",
+    "sketch": "light_Motion_ctrl.ino",
+    "port": "COM7"
 }
