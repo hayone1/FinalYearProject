@@ -213,6 +213,9 @@ int DHT11Pin = 4;
 int RelayPin = 7;
 int motionSensorPin = A3;
 boolean motionSensorState = LOW;  //start out as low
+boolean motionSensorStateRead = false;  //has the last change in motion sensor state been read?
+int motionSensorAnalogValue = 0;
+int motionSensorThreshold = 50;
 int calibrationTime = 30; //the time when the sensor outputs a low impulse
 // bool motionState = LOW; //start with no motion
 int alarmToggleButtonPin = 2;
@@ -287,10 +290,7 @@ void setup() {
   soundAlarm = false;
   //wait for pir to calibrate
   Serial.print("calibrating sensor "); 
-  for(int i = 0; i < calibrationTime; i++){ 
-   Serial.print("."); 
-   delay(1000); 
-   } 
+
    //Serial.println(" done"); 
    Serial.println("SENSOR ACTIVE"); 
    delay(50);
@@ -303,6 +303,7 @@ void loop() {
   //     soundAlarm = true;
   //     SoundAlarm();
   // }
+      //NOTE!NOTE!for some reason, the detection is inverted on my Arduino
   if (digitalRead(alarmToggleButtonPin) == LOW) {  //or if receive sound off from pi
       alarmToggleGetready = true;
       Serial.println("I am detected as presseD");
@@ -394,11 +395,20 @@ void SoundAlarm()
 
 void ReadSerial()
 {
+  Serial.println("reading serial");
   //first read motionsensor pin
+  //if motion is detected and the bool hasnt already been set to high
+  //serial wont keep sending high though, it only send it once per HIGH trigger
+  //based on the "motionSensorStateRead" boolean
   if (analogRead(motionSensorPin) > 50 && motionSensorState != HIGH){
     motionSensorState = HIGH;
+    motionSensorStateRead = false;
     Serial.println("motion detected");
   }
+  //if motion sensor state is toggled from HIGH to LOW
+ /* else if (analogRead(motionSensorPin) != motionSensorState && analogRead(motionSensorPin) == HIGH && motionSensorStateRead == true){
+    
+  }*/
   else if (analogRead(motionSensorPin) == LOW && motionSensorState != LOW){
     motionSensorState = LOW;
     Serial.println("motion not detected");
@@ -436,21 +446,31 @@ void ReadSerial()
           Serial.println(temphum);
           break; }
         case 3: { //read motion sensor
-          //bool tempmtn = ReadMotion();
-          //true, false string must be capitalized to work
-          const char *state = analogRead(motionSensorPin) > 50 ? "True" : "False";
-          Serial.print("mymotionsensor;property2:");
-          //Serial.print(analogRead(motionSensorPin));
-          //Serial.println(motionSensorState);
-          Serial.println(state);
+            //bool tempmtn = ReadMotion();
+            //true, false string must be capitalized to work
+            //const char *state = analogRead(motionSensorPin) > 50 ? "True" : "False";
+            const char* state;
+            if (motionSensorStateRead == false && motionSensorState == HIGH) {
+                //only return high if the current state is high and the current state has not been read before
+                state = "True";
+                motionSensorState = true;
+            }
+            else { state = "False"; }
+            //const char *state = motionSensorState == HIGH ? "True" : "False"; //if motion has been detected before now
+            Serial.print("mymotionsensor;property2:");
+            Serial.println(state);
+            motionSensorState = LOW;  //set it to low for further detection
+            //Serial.println(motK
         break; }
         case 4: { //set light state and extension box
           switch (mode){
             case 0: {
               TurnOffLight();
+              Serial.println("turn off light");
               break; }
             case 1: {
               TurnOnLight();
+              Serial.println("turn on light");
               break; }
             default: {  //case 3 or otherwise
               ToggleIndoorLight();

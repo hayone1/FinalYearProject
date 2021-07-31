@@ -99,6 +99,7 @@ void setup() {
   //please check the code where the pins are digitallyread to ensure they work right with your arduino
   pinMode(contactSensorPin, INPUT_PULLUP);
   pinMode(insideDoorButtonPin, INPUT);
+  pinMode(outdoorLightsPin, OUTPUT);
 
   MyServo.attach(servoPin); //Declare servoPin for servo
   MyServo.write(0); // Set initial position at 0 degrees
@@ -213,7 +214,8 @@ void loop() { //LOOP  LOOP  LOOP  LOOPO
               else { Serial.println("mydoorsensor;property2:False");} //dooris closed
               break;
           case 2:   //read servo position
-              Serial.println(("mydoorcontroller;property2:&d",MyServo.read()));  //send door state to user
+              Serial.print(("mydoorcontroller;property2:"));  //send door state to user
+              Serial.println(MyServo.read());
               break;
           case 3: //set light
           Serial.println("light control accepted");
@@ -316,7 +318,7 @@ void Lock()  //lock the servo and update the display (cant also be triggered by 
 void Unlock() {
   lcd.clear();
   lcd.print("Pass Accepted");
-  MyServo.write(180); // open the door mechanically
+  MyServo.write(90); // open the door mechanically
   delay(4000);
   ////also use light to indicate
   //digitalWrite(greenLedPin, HIGH);  
