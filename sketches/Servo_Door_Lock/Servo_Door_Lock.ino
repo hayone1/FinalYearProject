@@ -15,17 +15,23 @@ int servoPin = 12;
 
 
 
-int redLedPin = 9;
+//int redLedPin = 9;
+int lightTogglePin = 9;
+boolean lastlightSwitchState;
 int insideDoorButtonPin = 13;
-boolean LastDoorState = LOW;  //sarts as shut
+boolean lastDoorButtonState;
 
 int outdoorLightsPin = 11;
 
 int contactSensorPin = 10;
+
+//int outdoorLightsPin = 10;
+
+//int contactSensorPin = 11;
 //int insideDoorButtonPin = 0;
 
 int pos = 0;  //initial position of servo
-int lastDoorState;  //to track the state of the door
+int lastDoorState = LOW;  //to track the state of the door
 
 //lcd declearations
 LiquidCrystal lcd(A4, A5, A3, A2, A1, A0);
@@ -78,9 +84,19 @@ char currentKeyPressed; //stores the keys as the user presses
 int currentposition = 0;  //the position of the cursor
 
 //PLEASE INCREASE TIMEOUT TIME
-unsigned long timeout_millis = 10000;   //3 secs timeout to wait for password authentication
+unsigned long timeout_millis = 15000;   //15 secs timeout to wait for password authentication
 unsigned long current_millis;
+
+unsigned long indoor_door_switch_cooldown = 2000;
+unsigned long current_door_millis;
+
+unsigned long outdoor_light_switch_cooldown = 2000;
+unsigned long current_light_millis;
+
 bool count_timeout = false; //flag to signify wheather timeout should be counted or not
+
+int servoLockRot = 175;
+int servoUnlockRot = 45;
 
 
 
@@ -90,7 +106,7 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   Serial.println("im working");
-  pinMode(redLedPin, OUTPUT);
+  //pinMode(redLedPin, OUTPUT);
   //pinMode(greenLedPin, OUTPUT);
   //pinMode(solenoidLockPin, OUTPUT);
   
@@ -98,11 +114,12 @@ void setup() {
   //the readings on these pins were inverted for some reason on my Arduino
   //please check the code where the pins are digitallyread to ensure they work right with your arduino
   pinMode(contactSensorPin, INPUT_PULLUP);
-  pinMode(insideDoorButtonPin, INPUT);
+  pinMode(insideDoorButtonPin, INPUT_PULLUP);
+  pinMode(lightTogglePin, INPUT);
   pinMode(outdoorLightsPin, OUTPUT);
 
   MyServo.attach(servoPin); //Declare servoPin for servo
-  MyServo.write(0); // Set initial position at 0 degrees
+  MyServo.write(servoLockRot); // Set initial position at 0 degrees
 
   lcd.begin(16, 2);
   if (currentposition == 0){
@@ -113,14 +130,17 @@ void setup() {
   lcd.cursor(); //turn on the cursor
 
   //digitalWrite(greenLedPin, LOW); //TURN OFF
-  digitalWrite(redLedPin, HIGH);  //TURN ON
+  //digitalWrite(redLedPin, HIGH);  //TURN ON
   currentKeyCount = 0;
 
     //get curent password from the cloud here
     // currentPassword = defaultPassword;  //set to default password for now
-
-  count_timeout = false;
+  lastDoorButtonState = digitalRead(insideDoorButtonPin); //get the current switvh state
+  lastlightSwitchState = digitalRead(lightTogglePin);
+  current_light_millis = millis();
+  current_door_millis = millis();
   current_millis = millis();    //set to current elapsed time
+  count_timeout = false;
 
 }
 
@@ -129,13 +149,37 @@ void loop() { //LOOP  LOOP  LOOP  LOOPO
   // put your main code here, to run repeatedly:
     CheckContactSensor();   //check door state
   
-  if (digitalRead(insideDoorButtonPin) != LastDoorState){  
+    if (digitalRead(insideDoorButtonPin) != lastDoorButtonState && (millis() - current_door_millis > indoor_door_switch_cooldown)) {
     //when indoor button is pressed and new door state doesnt match last dor state
-    Serial.println("I am toggled");
-    LastDoorState = digitalRead(insideDoorButtonPin);
-    //doorToggledfromIn = true;
+    //int _latestButtonState = digitalRead(insideDoorButtonPin);
     ToggleDoor();
+    delay(100);
+    lastDoorButtonState = digitalRead(insideDoorButtonPin);
+    Serial.print(lastDoorButtonState);
+    Serial.println(": door switch toggled");
+    
+    //lastDoorButtonState = _latestButtonState;
+
+    current_door_millis = millis(); //set to current millis and wait for cooldows before another toggle takes effect
+    //doorToggledfromIn = true;
   }
+
+
+      if (digitalRead(lightTogglePin) != lastlightSwitchState && (millis() - current_light_millis > outdoor_light_switch_cooldown)) {
+        //when outdoor light button is pressed and new door state doesnt match last dor state
+        ToggleoutDoorLight();   //toggle the light
+        delay(100);
+        lastlightSwitchState = digitalRead(lightTogglePin);
+        Serial.print(lastlightSwitchState);
+        //lastlightSwitchState = _latestSwitchState;
+        
+        Serial.println(": light switch toggled am toggled");
+        
+        //lastDoorButtonState = _latestButtonState;
+
+        current_light_millis = millis(); //set to current millis and wait for cooldows before another toggle takes effect
+        //doorToggledfromIn = true;
+    }
   //else if (digitalRead(insideDoorButtonPin) == HIGH && doorToggledfromIn == true){
   //  Serial.println("I am low");
   //  doorToggledfromIn = false;
@@ -209,8 +253,8 @@ void loop() { //LOOP  LOOP  LOOP  LOOPO
       switch (dev)  //switch in first byte
       {
           case 1:   //read doorsensor
-              CheckContactSensor();
-              if (lastDoorState == HIGH) { Serial.println("mydoorsensor;property2:True");}  //true means opened
+              //CheckContactSensor(); automatically checked every update
+              if (lastDoorState == LOW) { Serial.println("mydoorsensor;property2:True");}  //true means opened
               else { Serial.println("mydoorsensor;property2:False");} //dooris closed
               break;
           case 2:   //read servo position
@@ -265,15 +309,16 @@ void loop() { //LOOP  LOOP  LOOP  LOOPO
 
 void CheckContactSensor()
 {
-    if (digitalRead(contactSensorPin) == HIGH) { //if contact sensor is triggered
-        //Lock();
-        //Serial.println("Door is open");
-        lastDoorState = HIGH;
-    }
-    else {
-        lastDoorState = LOW;   //door is open
-        //Serial.println("Door is CLOSED");
-    }
+    lastDoorState = digitalRead(contactSensorPin);
+    //if (digitalRead(contactSensorPin) == LOW) { //if contact sensor is triggered
+    //    //Lock();
+    //    //Serial.println("Door is open");
+    //    lastDoorState = HIGH;
+    //}
+    //else {
+    //    lastDoorState = LOW;   //door is open
+    //    //Serial.println("Door is CLOSED");
+    //}
 }
 
 
@@ -285,6 +330,7 @@ void Lock()  //lock the servo and update the display (cant also be triggered by 
     lcd.print("                ");
 
     lcd.setCursor(0, 1);
+    
     lcd.print("Door Locked     ");
 
     //wait then ask for password again
@@ -292,7 +338,7 @@ void Lock()  //lock the servo and update the display (cant also be triggered by 
     lcd.clear(); //Clear screen content
     lcd.setCursor(0,0);
     lcd.print("Password Access:");
-    delay(500);
+    delay(250);
 
     lcd.setCursor(0,1); //set the ursor to second line where pin will be imputed
 
@@ -302,10 +348,11 @@ void Lock()  //lock the servo and update the display (cant also be triggered by 
 
     //use light to indicate that passcide is needed
     //digitalWrite(greenLedPin, LOW); //TURN OFF
-    digitalWrite(redLedPin, HIGH);  //TURN ON
+    //digitalWrite(redLedPin, HIGH);  //TURN ON
 
-    if (MyServo.read() != 0) {  //if the servo isnt in locked state
-    MyServo.write(0); // Set position at 0 degrees to  lock the door
+    if (MyServo.read() != servoLockRot) {  //if the servo isnt in locked state
+    MyServo.write(servoLockRot); // Set position at 0 degrees to  lock the door
+    Serial.println("Door Locked     ");
     //lastDoorState = LOW;    //consider using the contact sensor for this
     }
     passCodeStatus = 0x0;
@@ -318,17 +365,17 @@ void Lock()  //lock the servo and update the display (cant also be triggered by 
 void Unlock() {
   lcd.clear();
   lcd.print("Pass Accepted");
-  MyServo.write(90); // open the door mechanically
-  delay(4000);
+  MyServo.write(servoUnlockRot); // open the door mechanically
+  delay(500);
   ////also use light to indicate
   //digitalWrite(greenLedPin, HIGH);  
-  digitalWrite(redLedPin, LOW);
+  //digitalWrite(redLedPin, LOW);
 
     //delay(500);
     lcd.clear(); //Clear screen content
     lcd.setCursor(0,0);
     lcd.print("Password Access:");
-    delay(500);
+    delay(250);
 
     lcd.setCursor(0,1); //set the ursor to second line where pin will be imputed
 
@@ -353,8 +400,9 @@ boolean UpdateDisplay()
 
             if (count_timeout != true) {    //if timeout already isnt counting
                 //char output[] = "passInput: %s",codeInput;
-                Serial.write("passInput"); //send output to raspberry pi
-                Serial.println(codeInput); //send output to raspberry pi
+                Serial.print("passInput");
+                Serial.print("mydoorcontroller;misc:"); //send output to raspberry pi
+                Serial.println(codeInput); //send user inputted passcode as output to raspberry pi
                 current_millis = millis(); //set timeout counter to current milliseconds on device
                 count_timeout = true; //allow timeout to start countnig
                 return count_timeout;
@@ -363,7 +411,7 @@ boolean UpdateDisplay()
         return false;
     }
     //if key is pressed
-    if (currentKeyCount < 4 && currentKeyPressed != '#' && currentKeyPressed != '*') { 
+    if (currentKeyCount < 4 && currentKeyPressed != '#' && currentKeyPressed != '*' && currentKeyPressed != 'A') {
       Serial.println("I got here"); 
         lcd.print(currentKeyPressed); //for now displays the key to test if its working
         Serial.println(currentKeyPressed);
@@ -372,7 +420,7 @@ boolean UpdateDisplay()
         Serial.print("code is");
         Serial.println((codeInput));
     }
-    else if (currentKeyPressed == '#') { //# clears the imputted password
+    else if (currentKeyPressed == '#' || currentKeyPressed == 'A') { //# clears the imputted password
         Lock();
     }
     else if (currentKeyPressed == '*') { //* deletes an inputted password the imputted password
@@ -416,6 +464,8 @@ boolean MatchPassword (byte pass_code_state)
 void ToggleoutDoorLight()  //adjust outdoorlight based on time of day
 {
     digitalWrite(outdoorLightsPin, !(digitalRead(outdoorLightsPin)));
+    Serial.print("light toggled pin is: ");
+    Serial.println(digitalRead(outdoorLightsPin));
 }
 void TurnOffLight() { digitalWrite(outdoorLightsPin, LOW); }
 void TurnOnLight() { digitalWrite(outdoorLightsPin, HIGH); }

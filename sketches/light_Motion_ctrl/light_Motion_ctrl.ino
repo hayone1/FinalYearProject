@@ -216,10 +216,10 @@ boolean motionSensorState = LOW;  //start out as low
 boolean motionSensorStateRead = false;  //has the last change in motion sensor state been read?
 int motionSensorAnalogValue = 0;
 int motionSensorThreshold = 50;
-int calibrationTime = 30; //the time when the sensor outputs a low impulse
+int calibrationTime = 58; //the time when the sensor outputs a low impulse
 // bool motionState = LOW; //start with no motion
 int alarmToggleButtonPin = 2;
-int alarmForceStopButtonPin = 3;
+int alarmForceStopButtonPin = 2;
 bool alarmToggleState = false;  //by default, the alarm is off
 bool alarmToggleGetready = false;  
 //bcs its a button, pressing button gets ready, releasing toggles
@@ -228,6 +228,11 @@ int blueledPin = 11;
 int redledPin = 9;
 int greenledPin = 10;
 int adhocledPin = 13;
+
+int lightTogglePin = 8;
+boolean lastlightSwitchState;
+unsigned long indoor_light_switch_cooldown = 1500;
+unsigned long current_light_millis;
 
 
 //int lightSwitchButton1State = 0;  //the state of the above button
@@ -276,6 +281,7 @@ void setup() {
   pinMode(alarmToggleButtonPin, INPUT);
   pinMode(alarmForceStopButtonPin, INPUT);
   pinMode(greenledPin, OUTPUT);
+  pinMode(lightTogglePin, INPUT_PULLUP);
   
 
   dht.begin();
@@ -286,14 +292,18 @@ void setup() {
 
   //attachInterrupt(digitalPinToInterrupt(alarmForceStopButtonPin), StopAlarm, CHANGE); // trigger when button pressed, but not when released.
 
- 
+  current_light_millis = millis();
   soundAlarm = false;
   //wait for pir to calibrate
   Serial.print("calibrating sensor "); 
-
+  //for (int i = 0; i < calibrationTime; i++) {
+  //    Serial.print(".");
+  //    delay(1000);
+  //}
    //Serial.println(" done"); 
    Serial.println("SENSOR ACTIVE"); 
    delay(50);
+   lastlightSwitchState = digitalRead(lightTogglePin);
 }
 
 void loop() {
@@ -304,7 +314,7 @@ void loop() {
   //     SoundAlarm();
   // }
       //NOTE!NOTE!for some reason, the detection is inverted on my Arduino
-  if (digitalRead(alarmToggleButtonPin) == LOW) {  //or if receive sound off from pi
+  if (digitalRead(alarmToggleButtonPin) == LOW && alarmToggleGetready != true) {  //or if receive sound off from pi
       alarmToggleGetready = true;
       Serial.println("I am detected as presseD");
       //return;
@@ -312,11 +322,29 @@ void loop() {
   else if (digitalRead(alarmToggleButtonPin) == HIGH && alarmToggleGetready == true) {  //or if receive sound off from pi
       soundAlarm = !soundAlarm;
       Serial.println("I am detected as released");
+      digitalWrite(12, HIGH);
       SoundAlarm();
       alarmToggleGetready = false;  
       
       //to prevent a held down button from causing continuous trigger
       //return;
+  }
+  //hmm... boiler plate code
+  //I noticed the lights dont go off when alarm state is false because the code never has the chance to reach that point
+  //in the SoundAlarm() method, so I put it here also
+
+
+  if (digitalRead(lightTogglePin) != lastlightSwitchState && (millis() - current_light_millis > indoor_light_switch_cooldown)) {
+      //when indoor light button is pressed and new door state doesnt match last dor state
+      int _latestSwitchState = digitalRead(lightTogglePin);
+      Serial.print(_latestSwitchState);
+      ToggleIndoorLight();   //toggle the light
+      Serial.println(": light switch toggled");
+      lastlightSwitchState = _latestSwitchState;
+      //lastDoorButtonState = _latestButtonState;
+
+      current_light_millis = millis(); //set to current millis and wait for cooldows before another toggle takes effect
+      //doorToggledfromIn = true;
   }
 
   ReadSerial();
@@ -333,7 +361,10 @@ void loop() {
 
 void ToggleIndoorLight()
 {
-    digitalWrite(RelayPin, !digitalRead(RelayPin)); //write the opposite 
+    digitalWrite(RelayPin, !digitalRead(RelayPin)); //write the opposite
+    delay(100);
+    Serial.print("light toggled: "); 
+    Serial.print(digitalRead(RelayPin)); 
 }
 void TurnOffLight()
 {
@@ -359,11 +390,12 @@ void SoundAlarm()
       //digitalWrite(buzzerPin, HIGH);
       digitalWrite(redledPin, LOW);
       digitalWrite(blueledPin, LOW);
+      digitalWrite(greenledPin, LOW);
       digitalWrite(buzzerPin, LOW);
       Serial.println("sound alarm not true");
       return;
     }
-  while (soundAlarm == true){
+  while (soundAlarm == true && digitalRead(alarmForceStopButtonPin) != LOW){
       //Blink red and blue Led
       if (digitalRead(redledPin)) {
           digitalWrite(redledPin, LOW);
@@ -386,6 +418,8 @@ void SoundAlarm()
       soundAlarm = false;
       return;
     }
+    Serial.print("alarm force stop state: ");
+    Serial.println(digitalRead(alarmForceStopButtonPin));
     ReadSerial();
     delay(1000);
     
@@ -395,7 +429,8 @@ void SoundAlarm()
 
 void ReadSerial()
 {
-  Serial.println("reading serial");
+  //Serial.println("reading serial");
+  
   //first read motionsensor pin
   //if motion is detected and the bool hasnt already been set to high
   //serial wont keep sending high though, it only send it once per HIGH trigger
@@ -413,12 +448,12 @@ void ReadSerial()
     motionSensorState = LOW;
     Serial.println("motion not detected");
   }
-
-  int val = analogRead(A3);  // read the input pin
-  Serial.print("analog read: ");          // debug value
-  Serial.print(val);          // debug value
-  Serial.print(" sensor state: ");          // debug value
-  Serial.println(motionSensorState); 
+  //logging code block
+  //int val = analogRead(A3);  // read the input pin
+  //Serial.print("analog read: ");          // debug value
+  //Serial.print(val);          // debug value
+  //Serial.print(" sensor state: ");          // debug value
+  //Serial.println(motionSensorState); 
   
     if (Serial.available()) {
       Serial.println("starting to read serial");
@@ -474,7 +509,7 @@ void ReadSerial()
               break; }
             default: {  //case 3 or otherwise
               ToggleIndoorLight();
-              Serial.println("toggle light");
+              //Serial.println("toggle light");
               
               break; }
           }
