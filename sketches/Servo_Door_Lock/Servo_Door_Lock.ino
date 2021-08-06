@@ -254,7 +254,7 @@ void loop() { //LOOP  LOOP  LOOP  LOOPO
       {
           case 1:   //read doorsensor
               //CheckContactSensor(); automatically checked every update
-              if (lastDoorState == LOW) { Serial.println("mydoorsensor;property2:True");}  //true means opened
+              if (lastDoorState == HIGH) { Serial.println("mydoorsensor;property2:True");}  //true means opened
               else { Serial.println("mydoorsensor;property2:False");} //dooris closed
               break;
           case 2:   //read servo position

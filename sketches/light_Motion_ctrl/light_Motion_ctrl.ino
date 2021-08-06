@@ -228,7 +228,7 @@ int blueledPin = 11;
 int redledPin = 9;
 int greenledPin = 10;
 int adhocledPin = 13;
-
+int controlRoomLedPin = 1;
 int lightTogglePin = 8;
 boolean lastlightSwitchState;
 unsigned long indoor_light_switch_cooldown = 1500;
@@ -277,6 +277,7 @@ void setup() {
   pinMode(blueledPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
   pinMode(melodyPin, OUTPUT);
+  pinMode(controlRoomLedPin, OUTPUT);
   pinMode(motionSensorPin, INPUT);
   pinMode(alarmToggleButtonPin, INPUT);
   pinMode(alarmForceStopButtonPin, INPUT);
@@ -304,6 +305,7 @@ void setup() {
    Serial.println("SENSOR ACTIVE"); 
    delay(50);
    lastlightSwitchState = digitalRead(lightTogglePin);
+   digitalWrite(controlRoomLedPin, HIGH); //to illuminate the control room
 }
 
 void loop() {
